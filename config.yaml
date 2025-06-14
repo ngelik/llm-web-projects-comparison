@@ -1,0 +1,9 @@
+metrics:
+  performance:     {weight: 0.20}
+  accessibility:   {weight: 0.15}
+  best-practices:  {weight: 0.10}
+  seo:             {weight: 0.05}
+  pwa:             {weight: 0.05}
+  code_quality:    {weight: 0.15}
+  build_time:      {weight: 0.15}
+  bundle_size:     {weight: 0.15} 

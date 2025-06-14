@@ -1,0 +1,7 @@
+projects:
+- name: simple-web-app
+  path: ./simple-web-app
+  serve_command: "npm run dev"
+  serve_url: http://localhost:3000
+  build_command: "npm run build"
+  dist_folder: dist 
