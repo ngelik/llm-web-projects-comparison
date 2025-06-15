@@ -132,6 +132,10 @@ main() {
     echo "  2. Or activate venv manually: source venv/bin/activate"
     echo "  3. Add more projects to projects.yaml for comparison"
     echo ""
+    echo "📊 Webbench now evaluates 10 comprehensive metrics:"
+    echo "  Performance • Accessibility • Code Quality • Build Time • Bundle Size"
+    echo "  Best Practices • Lines of Code • File Count • SEO • PWA"
+    echo ""
     echo "Happy benchmarking! 🚀"
 }
 

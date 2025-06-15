@@ -182,7 +182,8 @@ def run_code_analysis(path: Path) -> dict[str, float]:
     """
     Count lines of code and number of files in source directories.
     Excludes common build/dependency folders like node_modules, dist, etc.
-    Returns dict with lines_of_code + file_count converted to 0–10 scores.
+    Returns dict with lines_of_code + file_count converted to 0–10 scores,
+    plus raw counts for display purposes.
     """
     # Directories to exclude from counting
     exclude_dirs = {
@@ -221,7 +222,9 @@ def run_code_analysis(path: Path) -> dict[str, float]:
     
     return {
         "lines_of_code": lines_score(total_lines),
-        "file_count": files_score(file_count)
+        "file_count": files_score(file_count),
+        "lines_of_code_raw": total_lines,
+        "file_count_raw": file_count
     }
 
 # =============================================================================
@@ -262,8 +265,15 @@ def evaluate(prj: dict, weights: dict[str, float]) -> dict[str, float]:
     except Exception as e: rprint(f"[yellow]Code Analysis ⤵  {e}[/yellow]")
     # ── stop dev server (if started) ─────────────────────────────────────────
     if server:
-        with suppress(ProcessLookupError):
-            os.killpg(server.pid, signal.SIGINT)
+        with suppress(ProcessLookupError, PermissionError, OSError):
+            try:
+                os.killpg(server.pid, signal.SIGINT)
+            except:
+                # Fallback: try to terminate the process directly
+                server.terminate()
+                time.sleep(1)
+                if server.poll() is None:
+                    server.kill()
     return scores
 
 # =============================================================================
@@ -292,9 +302,20 @@ def main() -> None:
 
     for pr in projects:
         sc = evaluate(pr, weights)
-        table.append([pr["name"],
-                      *["{:.2f}".format(sc[k]) if k in sc else "-" for k in weights],
-                      f"{weighted_total(sc, weights):.2f}"])
+        # Format the row with special handling for lines_of_code and file_count
+        row = [pr["name"]]
+        for k in weights:
+            if k in sc:
+                if k == "lines_of_code" and "lines_of_code_raw" in sc:
+                    row.append(f"{int(sc['lines_of_code_raw'])} lines")
+                elif k == "file_count" and "file_count_raw" in sc:
+                    row.append(f"{int(sc['file_count_raw'])} files")
+                else:
+                    row.append(f"{sc[k]:.2f}")
+            else:
+                row.append("-")
+        row.append(f"{weighted_total(sc, weights):.2f}")
+        table.append(row)
 
     table.sort(key=lambda r: float(r[-1]), reverse=True)
 
