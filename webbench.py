@@ -42,6 +42,7 @@ metrics:
   code_quality:    {weight: 0.15}
   build_time:      {weight: 0.15}
   bundle_size:     {weight: 0.15}
+  security:        {weight: 0.10}
 
 # projects.yaml
 projects:
@@ -62,7 +63,7 @@ projects:
 # =============================================================================
 #  Standard library imports
 # =============================================================================
-import argparse, json, os, signal, subprocess, sys, time, uuid
+import argparse, json, os, signal, subprocess, sys, time, uuid, re
 from contextlib import suppress
 from pathlib import Path
 from urllib.request import urlopen, URLError
@@ -173,7 +174,7 @@ def run_build(path: Path, cfg: dict) -> dict[str, float]:
         raise RuntimeError("build command returned non-zero exit")
     dist_path = path / dist
     if not dist_path.exists():
-        raise RuntimeError(f"folder “{dist}” not found after build")
+        raise RuntimeError(f"folder '{dist}' not found after build")
     mb = sum(f.stat().st_size for f in dist_path.rglob('*') if f.is_file())/1_048_576
     return {"build_time": sec_score(secs),
             "bundle_size": size_score(mb)}
@@ -264,6 +265,136 @@ def count_package_dependencies(path: Path) -> dict[str, float]:
             "package_dependencies_raw": 0
         }
 
+def run_security_analysis(path: Path, url: str) -> dict[str, float]:
+    """
+    Comprehensive security analysis including:
+    1. npm audit for dependency vulnerabilities
+    2. Security headers analysis 
+    3. Source code security scan for exposed secrets
+    """
+    security_score = 10.0
+    issues_found = []
+    
+    # 1. NPM Audit - Check for dependency vulnerabilities
+    try:
+        code, output = sh("npm audit --json", cwd=path)
+        if code == 0:
+            audit_data = json.loads(output)
+            vulnerabilities = audit_data.get("metadata", {}).get("vulnerabilities", {})
+            
+            # Count high and critical vulnerabilities
+            high_vulns = vulnerabilities.get("high", 0)
+            critical_vulns = vulnerabilities.get("critical", 0)
+            moderate_vulns = vulnerabilities.get("moderate", 0)
+            
+            # Deduct points based on severity
+            vulnerability_penalty = (critical_vulns * 3.0) + (high_vulns * 2.0) + (moderate_vulns * 0.5)
+            security_score -= min(vulnerability_penalty, 4.0)  # Max 4 points deduction
+            
+            if critical_vulns > 0 or high_vulns > 0:
+                issues_found.append(f"{critical_vulns} critical, {high_vulns} high vulns")
+                
+    except (json.JSONDecodeError, subprocess.SubprocessError):
+        # If npm audit fails, assume some risk
+        security_score -= 1.0
+        issues_found.append("npm audit failed")
+    
+    # 2. Security Headers Analysis
+    try:
+        import urllib.request
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            headers = response.headers
+            
+            # Check for important security headers
+            security_headers = {
+                'X-Content-Type-Options': 'nosniff',
+                'X-Frame-Options': ['DENY', 'SAMEORIGIN'],
+                'X-XSS-Protection': '1; mode=block',
+                'Strict-Transport-Security': None,  # Any value is good
+                'Content-Security-Policy': None,    # Any value is good
+                'Referrer-Policy': None,           # Any value is good
+            }
+            
+            missing_headers = []
+            for header, expected in security_headers.items():
+                header_value = headers.get(header, '').lower()
+                if not header_value:
+                    missing_headers.append(header)
+                elif expected and isinstance(expected, list):
+                    if not any(exp.lower() in header_value for exp in expected):
+                        missing_headers.append(header)
+                elif expected and isinstance(expected, str):
+                    if expected.lower() not in header_value:
+                        missing_headers.append(header)
+            
+            # Deduct points for missing security headers (max 2 points)
+            header_penalty = min(len(missing_headers) * 0.3, 2.0)
+            security_score -= header_penalty
+            
+            if missing_headers:
+                issues_found.append(f"{len(missing_headers)} missing sec headers")
+                
+    except Exception:
+        # If we can't check headers, assume some risk
+        security_score -= 1.0
+        issues_found.append("security headers check failed")
+    
+    # 3. Source Code Security Scan
+    try:
+        # Patterns for common security issues
+        security_patterns = [
+            (r'(?i)(api[_-]?key|apikey)\s*[:=]\s*["\'][^"\']{10,}["\']', 'API keys'),
+            (r'(?i)(secret|password)\s*[:=]\s*["\'][^"\']{8,}["\']', 'Hardcoded secrets'),
+            (r'(?i)(access[_-]?token|accesstoken)\s*[:=]\s*["\'][^"\']{15,}["\']', 'Access tokens'),
+            (r'(?i)\.innerHTML\s*[+]?=\s*[^;]+', 'Potential XSS via innerHTML'),
+            (r'(?i)eval\s*\(', 'Dangerous eval() usage'),
+            (r'(?i)document\.write\s*\(', 'Dangerous document.write()'),
+        ]
+        
+        # Scan source files
+        security_issues = 0
+        scanned_files = 0
+        
+        for file_path in path.rglob('*'):
+            # Skip non-source files and excluded directories
+            if (any(exc_dir in file_path.parts for exc_dir in {'node_modules', 'dist', 'build', '.git'}) or
+                file_path.suffix not in {'.js', '.jsx', '.ts', '.tsx', '.vue', '.html'}):
+                continue
+                
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                    scanned_files += 1
+                    
+                    for pattern, description in security_patterns:
+                        matches = re.findall(pattern, content)
+                        if matches:
+                            security_issues += len(matches)
+                            
+            except (OSError, UnicodeDecodeError):
+                continue
+        
+        # Deduct points for security issues found in code (max 3 points)
+        code_penalty = min(security_issues * 0.5, 3.0)
+        security_score -= code_penalty
+        
+        if security_issues > 0:
+            issues_found.append(f"{security_issues} code security issues")
+            
+    except Exception:
+        # If code scan fails, minimal penalty
+        security_score -= 0.5
+        issues_found.append("code security scan failed")
+    
+    # Ensure score is within bounds
+    security_score = max(0.0, min(10.0, security_score))
+    
+    return {
+        "security": security_score,
+        "security_issues": "; ".join(issues_found) if issues_found else "none"
+    }
+
 # =============================================================================
 #  Evaluate a single project
 # =============================================================================
@@ -302,6 +433,8 @@ def evaluate(prj: dict, weights: dict[str, float]) -> dict[str, float]:
     except Exception as e: rprint(f"[yellow]Code Analysis ⤵  {e}[/yellow]")
     try:   scores |= count_package_dependencies(path)
     except Exception as e: rprint(f"[yellow]Package Dependencies ⤵  {e}[/yellow]")
+    try:   scores |= run_security_analysis(path, url)
+    except Exception as e: rprint(f"[yellow]Security Analysis ⤵  {e}[/yellow]")
     # ── stop dev server (if started) ─────────────────────────────────────────
     if server:
         with suppress(ProcessLookupError, PermissionError, OSError):
