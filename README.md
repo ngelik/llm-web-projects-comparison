@@ -91,23 +91,25 @@ The webbench tool will automatically:
 
 ## Metrics Evaluated
 
-- **Performance** (20%): Core Web Vitals, loading speed
-- **Accessibility** (15%): WCAG compliance, screen reader support
-- **Best Practices** (10%): Security, modern web standards
+- **Performance** (18%): Core Web Vitals, loading speed
+- **Accessibility** (13%): WCAG compliance, screen reader support
+- **Best Practices** (9%): Security, modern web standards
+- **Code Quality** (13%): ESLint errors/warnings count
+- **Build Time** (13%): Production build duration
+- **Bundle Size** (13%): Final distribution size
+- **Lines of Code** (6%): Source code complexity (500 lines ideal, 10k+ lines poor)
+- **File Count** (5%): Project organization (10 files ideal, 100+ files poor)
 - **SEO** (5%): Search engine optimization
 - **PWA** (5%): Progressive Web App features
-- **Code Quality** (15%): ESLint errors/warnings count
-- **Build Time** (15%): Production build duration
-- **Bundle Size** (15%): Final distribution size
 
 ## Expected Output
 
 You should see a table ranking the projects by their weighted total scores:
 
 ```
-name             performance  accessibility  best_practices  seo   pwa   code_quality  build_time  bundle_size  TOTAL
----------------  -----------  -------------  --------------  ----  ----  ------------  ----------  -----------  -------
-simple-web-app   8.50         9.20           8.80           7.50  6.00  9.50          8.90        9.10         8.65
+name             performance  accessibility  best-practices  code_quality  build_time  bundle_size  lines_of_code  file_count  seo   pwa   TOTAL
+---------------  -----------  -------------  --------------  ------------  ----------  -----------  -------------  ----------  ----  ----  -------
+simple-web-app   10.00        9.60           9.60           10.00         10.00       10.00        8.50           8.00        10.00 -     9.65
 ```
 
 ## Adding More Projects

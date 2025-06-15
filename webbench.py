@@ -122,6 +122,8 @@ def clamp_to_score(val: float, best: float, worst: float) -> float:
 
 sec_score  = lambda s: clamp_to_score(s, best=5,  worst=60)   # build time
 size_score = lambda m: clamp_to_score(m, best=1,  worst=50)   # MB
+lines_score = lambda l: clamp_to_score(l, best=500, worst=10000)  # lines of code
+files_score = lambda f: clamp_to_score(f, best=10, worst=100)     # number of files
 
 # =============================================================================
 #  Metric runners (one function per group of metrics)
@@ -176,6 +178,52 @@ def run_build(path: Path, cfg: dict) -> dict[str, float]:
     return {"build_time": sec_score(secs),
             "bundle_size": size_score(mb)}
 
+def run_code_analysis(path: Path) -> dict[str, float]:
+    """
+    Count lines of code and number of files in source directories.
+    Excludes common build/dependency folders like node_modules, dist, etc.
+    Returns dict with lines_of_code + file_count converted to 0–10 scores.
+    """
+    # Directories to exclude from counting
+    exclude_dirs = {
+        'node_modules', 'dist', 'build', '.git', 'venv', '__pycache__',
+        '.next', '.nuxt', 'coverage', '.nyc_output', 'tmp', 'temp'
+    }
+    
+    # File extensions to count as source code
+    source_extensions = {
+        '.js', '.jsx', '.ts', '.tsx', '.vue', '.py', '.html', '.htm', 
+        '.css', '.scss', '.sass', '.less', '.json', '.yaml', '.yml',
+        '.md', '.mdx', '.php', '.rb', '.go', '.rs', '.java', '.kt'
+    }
+    
+    total_lines = 0
+    file_count = 0
+    
+    for file_path in path.rglob('*'):
+        # Skip if file is in excluded directory
+        if any(exc_dir in file_path.parts for exc_dir in exclude_dirs):
+            continue
+            
+        # Skip if not a file or doesn't have source extension
+        if not file_path.is_file() or file_path.suffix not in source_extensions:
+            continue
+            
+        try:
+            # Count lines in file
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = sum(1 for line in f if line.strip())  # Count non-empty lines
+                total_lines += lines
+                file_count += 1
+        except (OSError, UnicodeDecodeError):
+            # Skip files that can't be read
+            continue
+    
+    return {
+        "lines_of_code": lines_score(total_lines),
+        "file_count": files_score(file_count)
+    }
+
 # =============================================================================
 #  Evaluate a single project
 # =============================================================================
@@ -210,6 +258,8 @@ def evaluate(prj: dict, weights: dict[str, float]) -> dict[str, float]:
     except Exception as e: rprint(f"[yellow]ESLint ⤵  {e}[/yellow]")
     try:   scores |= run_build(path, prj)
     except Exception as e: rprint(f"[yellow]Build ⤵  {e}[/yellow]")
+    try:   scores |= run_code_analysis(path)
+    except Exception as e: rprint(f"[yellow]Code Analysis ⤵  {e}[/yellow]")
     # ── stop dev server (if started) ─────────────────────────────────────────
     if server:
         with suppress(ProcessLookupError):
