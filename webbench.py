@@ -134,6 +134,7 @@ def run_lighthouse(url: str) -> dict[str, float]:
     Execute Lighthouse CLI in headless-Chrome mode and read JSON from stdout.
     Returns scores in 0–10 scale for:
       performance • accessibility • best_practices • seo • pwa
+    Plus raw performance score for display purposes.
     """
     if not shutil.which("lighthouse"):
         raise RuntimeError("lighthouse CLI is not installed (`npm i -g lighthouse`)")
@@ -143,7 +144,13 @@ def run_lighthouse(url: str) -> dict[str, float]:
         raise RuntimeError("lighthouse exited with non-zero status")
     cats = json.loads(out)["categories"]
     metrics = ("performance", "accessibility", "best-practices", "seo", "pwa")
-    return {k: cats[k]["score"]*10 for k in metrics if k in cats}
+    results = {k: cats[k]["score"]*10 for k in metrics if k in cats}
+    
+    # Add raw performance score for display (as percentage)
+    if "performance" in cats:
+        results["performance_raw"] = cats["performance"]["score"]
+    
+    return results
 
 def run_eslint(path: Path) -> float:
     """
@@ -163,7 +170,8 @@ def run_eslint(path: Path) -> float:
 def run_build(path: Path, cfg: dict) -> dict[str, float]:
     """
     Time the production build and compute distribution folder size.
-    Returns dict with build_time + bundle_size converted to 0–10 scores.
+    Returns dict with build_time + bundle_size converted to 0–10 scores,
+    plus raw values for display purposes.
     """
     cmd   = cfg.get("build_command", "npm run build")
     dist  = cfg.get("dist_folder",  "dist")
@@ -177,7 +185,9 @@ def run_build(path: Path, cfg: dict) -> dict[str, float]:
         raise RuntimeError(f"folder '{dist}' not found after build")
     mb = sum(f.stat().st_size for f in dist_path.rglob('*') if f.is_file())/1_048_576
     return {"build_time": sec_score(secs),
-            "bundle_size": size_score(mb)}
+            "bundle_size": size_score(mb),
+            "build_time_raw": secs,
+            "bundle_size_raw": mb}
 
 def run_code_analysis(path: Path) -> dict[str, float]:
     """
@@ -474,11 +484,17 @@ def main() -> None:
 
     for pr in projects:
         sc = evaluate(pr, weights)
-        # Format the row with special handling for lines_of_code and file_count
+        # Format the row with special handling for raw values
         row = [pr["name"]]
         for k in weights:
             if k in sc:
-                if k == "lines_of_code" and "lines_of_code_raw" in sc:
+                if k == "performance" and "performance_raw" in sc:
+                    row.append(f"{sc['performance_raw']*100:.0f}%")
+                elif k == "build_time" and "build_time_raw" in sc:
+                    row.append(f"{sc['build_time_raw']:.1f}s")
+                elif k == "bundle_size" and "bundle_size_raw" in sc:
+                    row.append(f"{sc['bundle_size_raw']:.1f}MB")
+                elif k == "lines_of_code" and "lines_of_code_raw" in sc:
                     row.append(f"{int(sc['lines_of_code_raw'])} lines")
                 elif k == "file_count" and "file_count_raw" in sc:
                     row.append(f"{int(sc['file_count_raw'])} files")
