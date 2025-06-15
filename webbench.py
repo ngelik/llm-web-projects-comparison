@@ -133,7 +133,7 @@ def run_lighthouse(url: str) -> dict[str, float]:
     """
     Execute Lighthouse CLI in headless-Chrome mode and read JSON from stdout.
     Returns scores in 0–10 scale for:
-      performance • accessibility • best_practices • seo • pwa
+      performance • accessibility • best_practices • seo
     Plus raw performance score for display purposes.
     """
     if not shutil.which("lighthouse"):
@@ -143,7 +143,7 @@ def run_lighthouse(url: str) -> dict[str, float]:
     if code:
         raise RuntimeError("lighthouse exited with non-zero status")
     cats = json.loads(out)["categories"]
-    metrics = ("performance", "accessibility", "best-practices", "seo", "pwa")
+    metrics = ("performance", "accessibility", "best-practices", "seo")
     results = {k: cats[k]["score"]*10 for k in metrics if k in cats}
     
     # Add raw performance score for display (as percentage)
