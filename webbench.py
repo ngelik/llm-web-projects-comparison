@@ -227,6 +227,43 @@ def run_code_analysis(path: Path) -> dict[str, float]:
         "file_count_raw": file_count
     }
 
+def count_package_dependencies(path: Path) -> dict[str, float]:
+    """
+    Count total package dependencies from package.json files.
+    Returns both the raw count and a score based on dependency complexity.
+    """
+    package_json_path = path / "package.json"
+    
+    if not package_json_path.exists():
+        return {
+            "package_dependencies": 0.0,
+            "package_dependencies_raw": 0
+        }
+    
+    try:
+        with open(package_json_path, 'r', encoding='utf-8') as f:
+            package_data = json.load(f)
+        
+        # Count dependencies and devDependencies
+        deps = len(package_data.get("dependencies", {}))
+        dev_deps = len(package_data.get("devDependencies", {}))
+        total_deps = deps + dev_deps
+        
+        # Score: fewer dependencies = better score
+        # 20 deps = 10.0, 100+ deps = 0.0, linear scale
+        score = max(0.0, min(10.0, 10.0 - (total_deps - 20) * 10.0 / 80.0))
+        
+        return {
+            "package_dependencies": score,
+            "package_dependencies_raw": total_deps
+        }
+        
+    except (json.JSONDecodeError, OSError):
+        return {
+            "package_dependencies": 0.0,
+            "package_dependencies_raw": 0
+        }
+
 # =============================================================================
 #  Evaluate a single project
 # =============================================================================
@@ -263,6 +300,8 @@ def evaluate(prj: dict, weights: dict[str, float]) -> dict[str, float]:
     except Exception as e: rprint(f"[yellow]Build ⤵  {e}[/yellow]")
     try:   scores |= run_code_analysis(path)
     except Exception as e: rprint(f"[yellow]Code Analysis ⤵  {e}[/yellow]")
+    try:   scores |= count_package_dependencies(path)
+    except Exception as e: rprint(f"[yellow]Package Dependencies ⤵  {e}[/yellow]")
     # ── stop dev server (if started) ─────────────────────────────────────────
     if server:
         with suppress(ProcessLookupError, PermissionError, OSError):
@@ -310,6 +349,8 @@ def main() -> None:
                     row.append(f"{int(sc['lines_of_code_raw'])} lines")
                 elif k == "file_count" and "file_count_raw" in sc:
                     row.append(f"{int(sc['file_count_raw'])} files")
+                elif k == "package_dependencies" and "package_dependencies_raw" in sc:
+                    row.append(f"{int(sc['package_dependencies_raw'])} deps")
                 else:
                     row.append(f"{sc[k]:.2f}")
             else:

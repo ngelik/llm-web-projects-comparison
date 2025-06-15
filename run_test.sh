@@ -3,8 +3,8 @@
 # =============================================================================
 # run_test.sh - Automated Webbench Test Runner
 # =============================================================================
-# This script runs the webbench performance comparison tool with the 
-# simple-web-app test project, including dependency checks.
+# This script runs the webbench performance comparison tool with all configured
+# projects, including dependency checks and setup automation.
 
 set -e  # Exit on any error
 
@@ -56,10 +56,16 @@ setup_python_venv() {
         print_success "Virtual environment already exists"
     fi
     
-    # Activate venv and install dependencies
-    print_status "Activating virtual environment and checking dependencies..."
-    source venv/bin/activate
+    # Check if we're already in a virtual environment
+    if [[ "$VIRTUAL_ENV" != "" ]]; then
+        print_status "Already in virtual environment: $VIRTUAL_ENV"
+    else
+        print_status "Activating virtual environment..."
+        source venv/bin/activate
+    fi
     
+    # Check and install dependencies
+    print_status "Checking Python dependencies..."
     if ! python -c "import yaml, tabulate, rich" 2>/dev/null; then
         print_warning "Installing Python dependencies from requirements.txt..."
         pip install -r requirements.txt
@@ -90,15 +96,28 @@ check_node_deps() {
 
 # Check if project dependencies are installed
 check_project_deps() {
-    print_status "Checking project dependencies..."
+    print_status "Checking project dependencies for all projects..."
     
-    if [ ! -d "simple-web-app/node_modules" ]; then
-        print_warning "Installing project dependencies..."
-        cd simple-web-app && npm install && cd ..
-        print_success "Project dependencies installed"
-    else
-        print_success "Project dependencies are already installed"
-    fi
+    # List of projects to check
+    local projects=(
+        "apps/hot-and-cold-openai" 
+        "apps/hot-and-cold-anthropic"
+        "apps/hot-and-cold-google"
+    )
+    
+    for project in "${projects[@]}"; do
+        if [ -d "$project" ]; then
+            if [ ! -d "$project/node_modules" ]; then
+                print_warning "Installing dependencies for $project..."
+                cd "$project" && npm install --legacy-peer-deps && cd - > /dev/null
+                print_success "Dependencies installed for $project"
+            else
+                print_success "Dependencies already installed for $project"
+            fi
+        else
+            print_warning "Project directory $project not found, skipping..."
+        fi
+    done
 }
 
 # Main execution
@@ -159,8 +178,8 @@ main() {
     echo "  • Generate comprehensive project scoring"
     echo ""
     
-    # Run webbench with error handling (using virtual environment)
-    if source venv/bin/activate && python webbench.py --config config.yaml --projects projects.yaml; then
+    # Run webbench with error handling
+    if python webbench.py --config config.yaml --projects projects.yaml; then
         print_header "✅ BENCHMARK COMPLETE"
         print_success "Webbench analysis completed successfully!"
         echo ""
@@ -169,21 +188,28 @@ main() {
         echo "Each metric is scored from 0-10, with 10 being the best."
         echo ""
         echo "🎯 METRICS EVALUATED:"
-        echo "  • Performance (18%): Core Web Vitals, loading speed"
-        echo "  • Accessibility (13%): WCAG compliance, screen reader support"
-        echo "  • Code Quality (13%): ESLint errors/warnings count"
-        echo "  • Build Time (13%): Production build duration"
-        echo "  • Bundle Size (13%): Final distribution size"
-        echo "  • Best Practices (9%): Security, modern web standards"
+        echo "  • Performance (16%): Core Web Vitals, loading speed"
+        echo "  • Accessibility (12%): WCAG compliance, screen reader support"
+        echo "  • Code Quality (12%): ESLint errors/warnings count"
+        echo "  • Build Time (12%): Production build duration"
+        echo "  • Bundle Size (12%): Final distribution size"
+        echo "  • Best Practices (8%): Security, modern web standards"
+        echo "  • Package Dependencies (6%): npm dependency count (20 deps ideal)"
         echo "  • Lines of Code (6%): Source code complexity (500 lines ideal)"
-        echo "  • File Count (5%): Project organization (10 files ideal)"
+        echo "  • File Count (6%): Project organization (10 files ideal)"
         echo "  • SEO (5%): Search engine optimization"
         echo "  • PWA (5%): Progressive Web App features"
         echo ""
         echo "📈 NEXT STEPS:"
-        echo "  1. Edit projects.yaml to add more projects for comparison"
-        echo "  2. Adjust metric weights in config.yaml if needed"
-        echo "  3. Run this script again: ./run_test.sh"
+        echo "  1. Review the comparison results above for all projects"
+        echo "  2. Edit projects.yaml to modify project configurations"
+        echo "  3. Adjust metric weights in config.yaml if needed"
+        echo "  4. Run this script again: ./run_test.sh"
+        echo ""
+        echo "🔍 CURRENT PROJECTS CONFIGURED:"
+        echo "  • Hot & Cold (OpenAI) - React/TypeScript/Vite"
+        echo "  • Hot & Cold (Anthropic) - React/TypeScript/Vite"
+        echo "  • Hot & Cold (Google) - React/TypeScript/Vite"
     else
         print_header "❌ BENCHMARK FAILED"
         print_error "Webbench analysis failed. Check the error messages above."

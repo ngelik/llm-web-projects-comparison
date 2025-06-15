@@ -1,7 +1,21 @@
 projects:
-- name: simple-web-app
-  path: ./simple-web-app
-  serve_command: "npm run dev"
-  serve_url: http://localhost:3000
+- name: hot-cold-openai
+  path: ./apps/hot-and-cold-openai
+  serve_command: "npm run dev -- --port 3001"
+  serve_url: http://localhost:3001
   build_command: "npm run build"
-  dist_folder: dist 
+  dist_folder: dist
+
+- name: hot-cold-anthropic
+  path: ./apps/hot-and-cold-anthropic
+  serve_command: "npm run dev -- --port 3002"
+  serve_url: http://localhost:3002
+  build_command: "npm run build"
+  dist_folder: dist
+
+- name: hot-cold-google
+  path: ./apps/hot-and-cold-google
+  serve_command: "npm run dev -- --port 3003"
+  serve_url: http://localhost:3003
+  build_command: "npm run build"
+  dist_folder: dist
