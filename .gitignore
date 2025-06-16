@@ -51,4 +51,7 @@ Thumbs.db
 *.log
 
 # ESLint temp files
-*eslint-*.json 
+*eslint-*.json
+
+# Generated reports
+reports/ 

@@ -43,6 +43,49 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# List generated HTML reports
+list_html_reports() {
+    if [ -d "reports" ] && [ "$(ls -A reports/*_lighthouse_*.html 2>/dev/null)" ]; then
+        echo ""
+        print_status "Generated HTML Reports:"
+        local count=0
+        for report in reports/*_lighthouse_*.html; do
+            if [ -f "$report" ]; then
+                local filename=$(basename "$report")
+                local filesize=$(ls -lh "$report" | awk '{print $5}')
+                local timestamp=$(echo "$filename" | grep -o '[0-9]\{8\}_[0-9]\{6\}')
+                local project_name=$(echo "$filename" | sed 's/\(.*\)_lighthouse_[0-9]\{8\}_[0-9]\{6\}\.html/\1/')
+                echo "  📄 $project_name ($timestamp) - $filesize"
+                ((count++))
+            fi
+        done
+        echo ""
+        echo "📁 Total reports: $count"
+        echo "📁 Reports saved in: $(pwd)/reports/"
+        echo "💡 Open these HTML files in your browser for detailed Lighthouse analysis!"
+        
+        # Offer to open reports in browser (optional)
+        if command_exists "open" && [ "$count" -gt 0 ]; then
+            echo ""
+            read -p "🌐 Open all reports in your default browser? (y/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                print_status "Opening HTML reports in browser..."
+                for report in reports/*_lighthouse_*.html; do
+                    if [ -f "$report" ]; then
+                        open "$report"
+                    fi
+                done
+                print_success "HTML reports opened in browser!"
+            fi
+        fi
+        return 0
+    else
+        echo "  ⚠️  No HTML reports found in reports/ directory"
+        return 1
+    fi
+}
+
 # Setup and check Python virtual environment
 setup_python_venv() {
     print_status "Setting up Python virtual environment..."
@@ -170,8 +213,10 @@ main() {
     print_header "🔥 RUNNING WEBBENCH ANALYSIS"
     print_status "Starting webbench performance analysis..."
     print_status "This may take a few minutes as it will:"
-    echo "  • Start the dev server"
+    echo "  • Start the dev server for each project"
     echo "  • Run Lighthouse audits (performance, accessibility, SEO, best practices)"
+    echo "  • Generate detailed HTML reports with timestamps (primary output)"
+    echo "  • Extract scores for comparison table"
     echo "  • Analyze code quality with ESLint"
     echo "  • Perform comprehensive security analysis (vulnerabilities, headers, code)"
     echo "  • Build and measure bundle size"
@@ -179,14 +224,40 @@ main() {
     echo "  • Generate comprehensive project scoring"
     echo ""
     
+    # Create reports directory if it doesn't exist
+    print_status "Preparing reports directory..."
+    mkdir -p reports
+    
+    # Clean up any old reports if desired
+    local old_reports_count=$(ls reports/*_lighthouse_*.html 2>/dev/null | wc -l || echo 0)
+    if [ "$old_reports_count" -gt 0 ]; then
+        print_warning "Found $old_reports_count existing HTML reports in reports/ directory"
+        echo "💡 Previous reports will be preserved with their timestamps"
+    fi
+    
+    print_success "Reports directory ready: $(pwd)/reports/"
+    
     # Run webbench with error handling
     if python webbench.py --config config.yaml --projects projects.yaml; then
         print_header "✅ BENCHMARK COMPLETE"
         print_success "Webbench analysis completed successfully!"
+        
+        # Show generated HTML reports
+        list_html_reports
+        
         echo ""
         echo "📊 RESULTS SUMMARY:"
         echo "The table above shows comprehensive scores for your web application."
         echo "Each metric is scored from 0-10, with 10 being the best."
+        echo ""
+        echo "📄 HTML REPORTS CONTAIN:"
+        echo "  • Detailed performance metrics (Core Web Vitals, load times)"
+        echo "  • Accessibility audit results with specific fix recommendations"
+        echo "  • SEO analysis with meta tags, structured data, and mobile usability"
+        echo "  • Best practices violations and security recommendations"
+        echo "  • Progressive Web App (PWA) compliance checklist"
+        echo "  • Opportunities for performance optimization"
+        echo "  • Diagnostics section with technical details"
         echo ""
         echo "🎯 METRICS EVALUATED:"
         echo "  • Performance (16%): Core Web Vitals, loading speed"
@@ -203,9 +274,10 @@ main() {
         echo ""
         echo "📈 NEXT STEPS:"
         echo "  1. Review the comparison results above for all projects"
-        echo "  2. Edit projects.yaml to modify project configurations"
-        echo "  3. Adjust metric weights in config.yaml if needed"
-        echo "  4. Run this script again: ./run_test.sh"
+        echo "  2. Open HTML reports in reports/ directory for detailed analysis"
+        echo "  3. Edit projects.yaml to modify project configurations"
+        echo "  4. Adjust metric weights in config.yaml if needed"
+        echo "  5. Run this script again: ./run_test.sh"
         echo ""
         echo "🔍 CURRENT PROJECTS CONFIGURED:"
         echo "  • Hot & Cold (OpenAI) - React/TypeScript/Vite"

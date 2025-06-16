@@ -67,6 +67,7 @@ import argparse, json, os, signal, subprocess, sys, time, uuid, re
 from contextlib import suppress
 from pathlib import Path
 from urllib.request import urlopen, URLError
+from datetime import datetime
 
 # =============================================================================
 #  Third-party imports (optional pretty output, coloured warnings)
@@ -129,28 +130,68 @@ files_score = lambda f: clamp_to_score(f, best=10, worst=100)     # number of fi
 # =============================================================================
 #  Metric runners (one function per group of metrics)
 # =============================================================================
-def run_lighthouse(url: str) -> dict[str, float]:
+def run_lighthouse(url: str, project_name: str = "unknown") -> dict[str, float]:
     """
-    Execute Lighthouse CLI in headless-Chrome mode and read JSON from stdout.
+    Execute Lighthouse CLI in headless-Chrome mode and generate HTML reports.
+    Also extracts scores from JSON output for comparison table.
     Returns scores in 0–10 scale for:
       performance • accessibility • best_practices • seo
     Plus raw performance score for display purposes.
     """
     if not shutil.which("lighthouse"):
         raise RuntimeError("lighthouse CLI is not installed (`npm i -g lighthouse`)")
-    cmd = f"lighthouse {url} --output=json --output-path=stdout --quiet --chrome-flags='--headless'"
-    code, out = sh(cmd)
-    if code:
-        raise RuntimeError("lighthouse exited with non-zero status")
-    cats = json.loads(out)["categories"]
-    metrics = ("performance", "accessibility", "best-practices", "seo")
-    results = {k: cats[k]["score"]*10 for k in metrics if k in cats}
     
-    # Add raw performance score for display (as percentage)
-    if "performance" in cats:
-        results["performance_raw"] = cats["performance"]["score"]
+    # Create reports directory if it doesn't exist
+    reports_dir = Path("reports")
+    reports_dir.mkdir(exist_ok=True)
     
-    return results
+    # Generate timestamp for filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    html_report_path = reports_dir / f"{project_name}_lighthouse_{timestamp}.html"
+    
+    # Create temporary file for JSON output (for score extraction)
+    temp_json = Path(f"temp_lighthouse_{uuid.uuid4().hex}.json")
+    
+    try:
+        # Run lighthouse to generate HTML report (primary output)
+        html_cmd = f"lighthouse {url} --output=html --output-path={html_report_path} --chrome-flags='--headless' --quiet"
+        html_code, _ = sh(html_cmd)
+        
+        # Generate JSON for score extraction (temporary, will be deleted)
+        json_cmd = f"lighthouse {url} --output=json --output-path={temp_json} --chrome-flags='--headless' --quiet"
+        json_code, _ = sh(json_cmd)
+        
+        if html_code != 0 or json_code != 0:
+            raise RuntimeError("lighthouse failed to generate reports")
+        
+        # Read and parse JSON for scores
+        if temp_json.exists():
+            with open(temp_json, 'r') as f:
+                lighthouse_data = json.load(f)
+            cats = lighthouse_data["categories"]
+        else:
+            raise RuntimeError("lighthouse JSON output not found")
+        
+        # Extract scores
+        metrics = ("performance", "accessibility", "best-practices", "seo")
+        results = {k: cats[k]["score"]*10 for k in metrics if k in cats}
+        
+        # Add raw performance score for display (as percentage)
+        if "performance" in cats:
+            results["performance_raw"] = cats["performance"]["score"]
+        
+        # Report success
+        if html_report_path.exists():
+            rprint(f"[green]✓ HTML report saved: {html_report_path}[/green]")
+        else:
+            rprint(f"[yellow]⚠ HTML report not found at {html_report_path}[/yellow]")
+        
+        return results
+        
+    finally:
+        # Clean up temporary JSON file
+        if temp_json.exists():
+            temp_json.unlink()
 
 def run_eslint(path: Path) -> float:
     """
@@ -433,7 +474,7 @@ def evaluate(prj: dict, weights: dict[str, float]) -> dict[str, float]:
             return {}
     # ── collect metrics ──────────────────────────────────────────────────────
     scores: dict[str, float] = {}
-    try:   scores |= run_lighthouse(url)
+    try:   scores |= run_lighthouse(url, prj["name"])
     except Exception as e: rprint(f"[yellow]Lighthouse ⤵  {e}[/yellow]")
     try:   scores["code_quality"] = run_eslint(path)
     except Exception as e: rprint(f"[yellow]ESLint ⤵  {e}[/yellow]")
@@ -470,6 +511,10 @@ def weighted_total(scores: dict[str,float], weights: dict[str,float]) -> float:
 #  Main CLI
 # =============================================================================
 def main() -> None:
+    # Clean up any leftover temporary files from previous runs
+    for temp_file in Path(".").glob("temp_lighthouse_*.json"):
+        temp_file.unlink(missing_ok=True)
+    
     ap = argparse.ArgumentParser(description="Compare multiple web projects.")
     ap.add_argument("--config",   required=True, help="metric weights YAML")
     ap.add_argument("--projects", required=True, help="projects YAML")

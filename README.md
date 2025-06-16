@@ -85,9 +85,31 @@ The webbench tool will automatically:
 1. **Start the dev server** for the simple-web-app
 2. **Wait for it to be ready** (polls http://localhost:3000)
 3. **Run Lighthouse audit** - measures performance, accessibility, SEO, PWA, best practices
-4. **Run ESLint analysis** - evaluates code quality
-5. **Run production build** - measures build time and bundle size
-6. **Calculate weighted scores** and rank the results
+4. **Generate HTML reports** - creates detailed Lighthouse reports saved to `reports/` directory
+5. **Run ESLint analysis** - evaluates code quality
+6. **Run production build** - measures build time and bundle size
+7. **Calculate weighted scores** and rank the results
+
+## Generated Reports
+
+The tool automatically generates detailed HTML reports for each project:
+
+- **Primary Output**: HTML reports with comprehensive Lighthouse analysis
+- **Location**: `reports/` directory (created automatically)
+- **Naming**: `{project_name}_lighthouse_{YYYYMMDD_HHMMSS}.html`
+- **Content**: Complete Lighthouse audit results with detailed recommendations and visual charts
+- **Example**: `reports/simple-web-app_lighthouse_20241215_143022.html`
+
+These HTML reports are the main deliverable and provide in-depth analysis of:
+- **Performance metrics** with visual charts and optimization suggestions
+- **Accessibility audit results** with specific fix recommendations and impact levels
+- **SEO analysis** with meta tags, structured data, and mobile usability checks
+- **Best practices violations** and security recommendations with priorities
+- **Progressive Web App (PWA)** compliance checklist and implementation guide
+- **Opportunities section** with actionable performance improvements
+- **Diagnostics section** with technical details and resource analysis
+
+*Note: JSON data is temporarily generated for score extraction in the comparison table, then automatically cleaned up.*
 
 ## Metrics Evaluated
 
